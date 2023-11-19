@@ -1,0 +1,30 @@
+name: Deploy dev
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy-ethglobal-backend:
+    runs-on: ubuntu-latest
+    env:
+      ENV_FILE: ${{ secrets.DEV_ENV_FILE }}
+      USER: ${{ vars.DEV_USER }}
+      HOST: ${{ vars.DEV_HOST }}
+      PROJECT_PATH: /home/ditto/project/ethglobal-backend
+      SERVICE_NAME: ethglobal-backend
+    steps:
+    - uses: actions/checkout@v2
+    - name: Adding Known Hosts
+      run: mkdir -p ~/.ssh/ && ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+    - name: Install SSH Key
+      run: install -m 600 -D /dev/null ~/.ssh/id_rsa && echo "${{ secrets.DEV_SSH_KEY }}" > ~/.ssh/id_rsa
+    - name: Generate env for project
+      run: echo "$ENV_FILE" > .env
+    - name: Deploy code to server server
+      run: rsync -ar --delete-after --exclude ditto* --exclude /node_modules ./ ${USER?}@${HOST?}:${PROJECT_PATH?}/
+    - name: Install packages
+      run: ssh ${USER?}@${HOST?} "cd ${PROJECT_PATH?} && npm i"
+    - name: Build app
+      run: ssh ${USER?}@${HOST?} "cd ${PROJECT_PATH?} && npm run build"
+    - name: Restart service
+      run: ssh ${USER?}@${HOST?} "sudo service ${SERVICE_NAME?} restart"
