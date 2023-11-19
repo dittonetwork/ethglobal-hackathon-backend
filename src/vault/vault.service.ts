@@ -22,9 +22,17 @@ export class VaultService {
     const vaults = await this.vaultRepository.find({
       where: { userAddress: ILike(address) },
     });
-    return vaults.map((vault) => ({
+    const array = vaults.map((vault) => ({
       address: vault.address,
-      chainId: vault.chainid,
+      chainId: vault.chainId,
     }));
+    const uniqueArray = array.filter(
+      (value, index, self) =>
+        index ===
+        self.findIndex(
+          (t) => t.address === value.address && t.chainId === value.chainId,
+        ),
+    );
+    return uniqueArray;
   }
 }

@@ -7,15 +7,20 @@ import { VaultModule } from './vault/vault.module';
 import { Account } from './account/account.entity';
 import { Vault } from './vault/vault.entity';
 import { Event } from './event/event.entity';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ScannerManagerModule } from './handler/handler.module';
+import { LastBlock } from './listener/lastBlock.model';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: 'ditto.db',
-      entities: [Account, Event, Vault],
+      entities: [Account, Event, Vault, LastBlock],
       synchronize: true,
     }),
+    ScheduleModule.forRoot(),
+    ScannerManagerModule,
     NotificationsModule,
     VaultModule,
   ],

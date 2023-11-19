@@ -26,13 +26,28 @@ export class Web3DataProviderService {
       },
       80001: {
         rpcUrl: POLYGON_MUMBAI_RPC_PROVIDER,
-        blockExplorerUrl: 'https://polygonscan.com/',
+        blockExplorerUrl: 'https://mumbai.polygonscan.com/',
         name: 'polygon_mumbai',
       },
       420: {
         rpcUrl: OPTIMISM_GOERLI_RPC_PROVIDER,
         blockExplorerUrl: 'https://goerli-optimism.etherscan.io/',
         name: 'optimism_goerli',
+      },
+      43161: {
+        rpcUrl: 'https://ava-mainnet.public.blastapi.io/ext/bc/C/rpc',
+        blockExplorerUrl: '',
+        name: 'avax_mainnet',
+      },
+      10: {
+        rpcUrl: 'https://optimism.blockpi.network/v1/rpc/public',
+        blockExplorerUrl: '',
+        name: 'optimism_mainnet',
+      },
+      1101: {
+        rpcUrl: 'https://rpc.polygon-zkevm.gateway.fm',
+        blockExplorerUrl: '',
+        name: 'polygon_zkevm',
       },
     };
     this.networks = networks;

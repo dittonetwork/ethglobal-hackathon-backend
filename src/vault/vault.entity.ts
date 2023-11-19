@@ -11,6 +11,6 @@ export class Vault {
   @Column()
   address: string;
 
-  @Column()
-  chainid: number;
+  @Column({ name: 'chainid' })
+  chainId: number;
 }

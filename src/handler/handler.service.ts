@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-// import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Web3DataProviderService } from './web3dataProvider.service';
 import { EventListenerService } from 'src/listener/eventListener.service';
 
@@ -12,7 +12,7 @@ export class BlockchainEventListenerManager {
     private readonly listenerService: EventListenerService,
   ) {}
 
-  // @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_MINUTE)
   handleScheduledListening() {
     const chainIds = this.web3DataProviderService.getChains();
     Promise.all(

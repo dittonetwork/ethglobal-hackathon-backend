@@ -34,6 +34,28 @@ export class NotificationsService {
     return notifications;
   }
 
+  async getAllNotifications() {
+    const events: string[] = [
+      'Action has been successfully executed (chainId 43113)',
+      'Action has been successfully executed (chainId 43113)',
+      'Action has been successfully executed (chainId 43113)',
+      'Action has been successfully executed (chainId 43113)',
+      'Action has been successfully executed (chainId 43113)',
+    ];
+
+    for (const eventElem of events) {
+      const event = new Event();
+      event.accountAddress = '0xa06E023488f8B66Ae55f74282afFe6669E2E39f7';
+      event.vaultAddress = '0xa06E023488f8B66Ae55f74282afFe6669E2E39f7';
+      event.send = true;
+      event.date = Date.now();
+      event.name = eventElem;
+      event.description = eventElem;
+      await this.eventRepository.save(event);
+    }
+    return { status: 'Notification enabled' };
+  }
+
   async addNotificationAddress(address: string): Promise<any> {
     let account = await this.accountRepository.findOne({
       where: { address },

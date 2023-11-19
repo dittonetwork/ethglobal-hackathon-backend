@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import Web3, { FMT_BYTES, FMT_NUMBER, LogBase } from 'web3';
 import { LastBlock } from './lastBlock.model';
 import {
@@ -8,9 +8,12 @@ import {
   TransactionParserService,
 } from './transactionParser.service';
 import { abiInterface } from './abiInterface';
+import { Vault } from 'src/vault/vault.entity';
+import { Event } from 'src/event/event.entity';
+import { Account } from 'src/account/account.entity';
 
-const createEvent = '';
-const actionEvent = '';
+const createEvent = 'DittoDimondVaultCreated';
+const actionEvent = 'DittoCollectedTokenAndExecutedAction';
 
 const topics = [
   abiInterface.getEvent(createEvent)?.topicHash,
@@ -26,6 +29,12 @@ export class EventListenerService {
     private readonly transactionParserService: TransactionParserService,
     @InjectRepository(LastBlock)
     private readonly lastBlockRepository: Repository<LastBlock>,
+    @InjectRepository(Vault)
+    private readonly vaultRepository: Repository<Vault>,
+    @InjectRepository(Event)
+    private readonly eventRepository: Repository<Event>,
+    @InjectRepository(Account)
+    private readonly accountRepository: Repository<Account>,
   ) {}
 
   async processLastLogs(provider: Web3, chainId: string) {
@@ -41,25 +50,17 @@ export class EventListenerService {
           this.logger.error(`Error while getting last block number. ${e}`);
           return;
         }
-      } else {
-        const currentBlock = await provider.eth.getBlockNumber();
-        try {
-          const logs = await provider.eth.getPastLogs({
-            topics: [topics],
-            fromBlock: lastScannedBlock + 1,
-            toBlock: currentBlock,
-          });
-          if (logs && logs.length) {
-            this.logger.debug(`Found ${logs.length} logs for processing.`);
-            this.processLogs(provider, chainId, logs);
-          }
-        } catch (e) {
-          this.logger.error(
-            `Error while processing logs for block ${currentBlock} ${e} ${lastScannedBlock}`,
-          );
-          return;
-        }
-        await this.updateLastScannedBlockNumber(currentBlock, chainId);
+      }
+
+      const currentBlock = await provider.eth.getBlockNumber();
+      const logs = await provider.eth.getPastLogs({
+        topics: [topics],
+        fromBlock: lastScannedBlock,
+        toBlock: currentBlock,
+      });
+      if (logs && logs.length) {
+        this.logger.debug(`Found ${logs.length} logs for processing.`);
+        this.processLogs(provider, chainId, logs);
       }
     } catch (e) {
       this.logger.error(`Error while processing logs ${chainId} ${e}`);
@@ -80,10 +81,8 @@ export class EventListenerService {
           number: FMT_NUMBER.NUMBER,
         });
         const parsedTx = this.transactionParserService.parseTransaction(tx);
-        const txLogs = parsedTx.logs;
-        console.log(txLogs);
         //Events
-        this.storeEvent(chainId, parsedTx);
+        await this.storeEvent(chainId, parsedTx);
         //Termination states (success, canceled)
       } catch (e) {
         this.logger.error(`Error while processing logs for tx ${hash}`);
@@ -91,28 +90,69 @@ export class EventListenerService {
     });
   }
 
-  storeEvent(chainId: string, tx: ParsedTransaction) {
-    // const workflowKey = this.getWorkflowKeyEvent(tx.logs)?.args[0];
-    // const vaultAddress = this.getWorkflowVaultEvent(tx.logs)?.address;
+  async storeEvent(chainId: string, tx: ParsedTransaction) {
     try {
-      console.log(chainId, tx);
-    } catch (e) {
-      this.logger.error(
-        '', // `Error while processing event: vaultAddress: ${vaultAddress}, workflowKey: ${workflowKey}`,
+      const eventText = 'Action has been successfully executed';
+      await Promise.all(
+        tx.logs.map(async (log) => {
+          if (log.name === 'DittoDimondVaultCreated') {
+            const vault = log.address;
+            const owner = tx.from;
+            await this.saveVault(vault, owner, chainId);
+          } else if (log.name === 'DittoCollectedTokenAndExecutedAction') {
+            console.log(log);
+            const vault = log.address;
+            const tx = log.transactionHash;
+            await this.saveEvent(vault, chainId, tx, eventText);
+          }
+        }),
       );
+    } catch (e) {
+      this.logger.error(`Error while processing event`);
     }
   }
 
-  /* 
-  getWorkflowKeyEvent(logs: ParsedLog[]) {
-    return logs.find((log) => workflowKeyEvents.some((e) => e === log.name));
+  async saveVault(vaultAddress: string, userAddress: string, chainId: string) {
+    const vault = new Vault();
+    const account = await this.getAccountAddress(userAddress);
+    vault.address = vaultAddress;
+    vault.userAddress = userAddress;
+    vault.chainId = parseInt(chainId);
+    await this.vaultRepository.save(vault);
+    if (!account) {
+      const acc = new Account();
+      acc.address = userAddress;
+      acc.notify = true;
+      await this.accountRepository.save(acc);
+    }
   }
 
-  getWorkflowVaultEvent(logs: ParsedLog[]) {
-    return logs.find((log) =>
-      workflowVaultAddressEvents.some((e) => e === log.name),
+  async saveEvent(
+    vault: string,
+    chainId: string,
+    tx: string,
+    eventText: string,
+  ) {
+    console.log(
+      'DittoCollectedTokenAndExecutedAction',
+      vault,
+      chainId,
+      tx,
+      eventText,
     );
-  } */
+    const account = await this.getAccount(vault);
+    if (account) {
+      const event = new Event();
+      event.vaultAddress = vault;
+      const account = await this.getAccount(vault);
+      event.accountAddress = account;
+      event.name = `${eventText} (chainId ${chainId})`;
+      event.description = 'DittoCollectedTokenAndExecutedAction';
+      event.date = 0;
+      event.send = false;
+      await this.eventRepository.save(event);
+    }
+  }
 
   getTransactionsHashes(logs: (LogBase<bigint, string> | string)[]) {
     const hashes = new Set<string>();
@@ -123,6 +163,24 @@ export class EventListenerService {
       hashes.add(log.transactionHash);
     });
     return [...hashes];
+  }
+
+  async getAccount(vault_address: string): Promise<string | null> {
+    const vault = await this.vaultRepository.findOne({
+      where: {
+        address: ILike(vault_address),
+      },
+    });
+    return vault ? vault.userAddress : null;
+  }
+
+  async getAccountAddress(address: string): Promise<string | null> {
+    const account = await this.accountRepository.findOne({
+      where: {
+        address: ILike(address),
+      },
+    });
+    return account ? account.address : null;
   }
 
   async getLastScannedBlockNumber(chainId: string) {
